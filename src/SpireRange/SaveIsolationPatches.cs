@@ -24,6 +24,7 @@ internal static class ProgressIsolationPatch
         foreach (var name in new[]
         {
             nameof(SaveManager.DeleteCurrentRun),
+            nameof(SaveManager.SaveRunHistory),
             nameof(SaveManager.UpdateProgressAfterCombatWon),
             nameof(SaveManager.UpdateProgressWithRunData),
             nameof(SaveManager.SaveProgressFile)

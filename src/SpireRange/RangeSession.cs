@@ -36,6 +36,7 @@ internal static class RangeSession
             if (IsActive) await Stop();
             Config = config;
             IsActive = true;
+            RangeLocalization.Register();
             var player = Player.CreateForNewRun(config.Character, UnlockState.all, 1UL);
             _state = RunState.CreateForNewRun(new[] { player },
                 ActModel.GetDefaultList().Select(a => a.ToMutable()).ToArray(),

@@ -19,6 +19,7 @@ try
     active.SetValue(null, true);
     await save.SaveRun(null);
     save.DeleteCurrentRun();
+    save.SaveRunHistory(null!);
     save.UpdateProgressAfterCombatWon(null!, null!);
     save.UpdateProgressWithRunData(null!, false);
     save.SaveProgressFile();
@@ -36,6 +37,7 @@ try
     }
 
     await LifecycleSmoke.Run(assembly, harmony);
+    GameOverSmoke.Run(assembly, save, harmony);
 }
 finally
 {

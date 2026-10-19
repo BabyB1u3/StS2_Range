@@ -32,15 +32,21 @@ internal static class RangeUi
         var center = new CenterContainer();
         overlay.AddChild(center);
         center.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(760, 0) };
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(800, 0) };
         center.AddChild(panel);
         var margin = new MarginContainer();
         foreach (var side in new[] { "left", "right", "top", "bottom" })
             margin.AddThemeConstantOverride("margin_" + side, 24);
         panel.AddChild(margin);
-        var box = new VBoxContainer();
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(760, Math.Clamp(menu.GetViewportRect().Size.Y - 140, 360, 850)),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled
+        };
+        margin.AddChild(scroll);
+        var box = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         box.AddThemeConstantOverride("separation", 12);
-        margin.AddChild(box);
+        scroll.AddChild(box);
         box.AddChild(new Label { Text = "靶场 / Practice Range", HorizontalAlignment = HorizontalAlignment.Center });
         box.AddChild(new Label { Text = "临时单人战斗 · 不保存本局进度 · 单个怪物模式为实验功能" });
 
@@ -48,24 +54,58 @@ internal static class RangeUi
         var cards = ModelDb.AllCards.OrderBy(c => c.Id.Entry).ToList();
         var monsters = ModelDb.Monsters.OrderBy(m => m.Id.Entry).ToList();
         var character = AddChoice(box, "角色 / Character", characters.Select(c => Name(c, "characters")));
+
+        var cardGroups = new List<(string Label, HashSet<ModelId>? Ids)>
+        {
+            ("全部卡牌 / All cards", null)
+        };
+        foreach (var owner in characters)
+            cardGroups.Add((Name(owner, "characters"), owner.CardPool.AllCards
+                .Concat(owner.StartingDeck).Select(c => c.Id).ToHashSet()));
+        var characterCardIds = cardGroups.Skip(1).SelectMany(g => g.Ids!).ToHashSet();
+        cardGroups.Add(("通用及特殊卡牌 / Shared & special", cards.Select(c => c.Id)
+            .Where(id => !characterCardIds.Contains(id)).ToHashSet()));
+        var cardGroup = AddChoice(box, "按角色筛选卡牌 / Card character", cardGroups.Select(g => g.Label));
         var cardFilter = new LineEdit { PlaceholderText = "搜索卡牌名称 / ID" };
         box.AddChild(cardFilter);
         var cardChoice = AddChoice(box, "卡牌 / Card", cards.Select(c => Name(c, "cards")));
+
+        var monsterGroups = new List<(string Label, HashSet<ModelId>? Ids)>
+        {
+            ("全部地图 / All maps", null)
+        };
+        foreach (var act in ModelDb.Acts)
+            monsterGroups.Add((Name(act, "acts"), act.AllMonsters.Select(m => m.Id).ToHashSet()));
+        var monsterGroup = AddChoice(box, "按地图筛选怪物 / Monster map", monsterGroups.Select(g => g.Label));
         var monsterFilter = new LineEdit { PlaceholderText = "搜索怪物名称 / ID" };
         box.AddChild(monsterFilter);
         var monsterChoice = AddChoice(box, "怪物 / Monster", monsters.Select(m => Name(m, "monsters")));
         var visibleCards = cards.ToList();
         var visibleMonsters = monsters.ToList();
-        cardFilter.TextChanged += query =>
+        void RefreshCards()
         {
-            visibleCards = cards.Where(c => Name(c, "cards").Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            var selected = cardChoice.Selected >= 0 ? visibleCards[cardChoice.Selected] : null;
+            var ids = cardGroups[cardGroup.Selected].Ids;
+            visibleCards = cards.Where(c => (ids is null || ids.Contains(c.Id)) &&
+                Name(c, "cards").Contains(cardFilter.Text, StringComparison.OrdinalIgnoreCase)).ToList();
             Fill(cardChoice, visibleCards.Select(c => Name(c, "cards")));
-        };
-        monsterFilter.TextChanged += query =>
+            var index = selected is null ? -1 : visibleCards.FindIndex(c => c.Id == selected.Id);
+            if (index >= 0) cardChoice.Select(index);
+        }
+        void RefreshMonsters()
         {
-            visibleMonsters = monsters.Where(m => Name(m, "monsters").Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            var selected = monsterChoice.Selected >= 0 ? visibleMonsters[monsterChoice.Selected] : null;
+            var ids = monsterGroups[monsterGroup.Selected].Ids;
+            visibleMonsters = monsters.Where(m => (ids is null || ids.Contains(m.Id)) &&
+                Name(m, "monsters").Contains(monsterFilter.Text, StringComparison.OrdinalIgnoreCase)).ToList();
             Fill(monsterChoice, visibleMonsters.Select(m => Name(m, "monsters")));
-        };
+            var index = selected is null ? -1 : visibleMonsters.FindIndex(m => m.Id == selected.Id);
+            if (index >= 0) monsterChoice.Select(index);
+        }
+        cardFilter.TextChanged += _ => RefreshCards();
+        cardGroup.ItemSelected += _ => RefreshCards();
+        monsterFilter.TextChanged += _ => RefreshMonsters();
+        monsterGroup.ItemSelected += _ => RefreshMonsters();
         var upgraded = new CheckBox { Text = "使用升级版卡牌 / Upgraded card" };
         box.AddChild(upgraded);
         box.AddChild(new Label { Text = "每回合基础能量 / Base energy per turn" });
