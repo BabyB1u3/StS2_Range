@@ -44,14 +44,10 @@ internal static class RangeSession
             manager.SetUpNewSingleplayer(_state, shouldSave: false);
             manager.CombatReplayWriter.IsEnabled = false;
 
-            // A small deck guarantees the test card is drawn through the normal turn setup.
-            player.Deck.Clear(silent: true);
-            for (var i = 0; i < 5; i++)
-            {
-                var card = _state.CreateCard(config.Card, player);
-                if (config.Upgraded && card.IsUpgradable) CardCmd.Upgrade(card);
-                player.Deck.AddInternal(card, silent: true);
-            }
+            // Keep the character's starting inventory and add one test card to the deck.
+            var card = _state.CreateCard(config.Card, player);
+            if (config.Upgraded && card.IsUpgradable) CardCmd.Upgrade(card);
+            player.Deck.AddInternal(card, silent: true);
             player.MaxEnergy = config.Energy;
             await PreloadManager.LoadRunAssets(new[] { config.Character });
             await PreloadManager.LoadActAssets(_state.Act);
@@ -128,7 +124,9 @@ internal static class RangeSession
     {
         try
         {
-            RunManager.Instance.CleanUp(graceful: false);
+            // false is reserved for process shutdown and leaves CombatManager's state intact.
+            // Reset and exit both need a full teardown before another battle can be set up.
+            RunManager.Instance.CleanUp(graceful: true);
             await PreloadManager.LoadMainMenuEssentials();
             NGame.Instance?.RootSceneContainer.SetCurrentScene(NMainMenu.Create(openTimeline: false));
         }

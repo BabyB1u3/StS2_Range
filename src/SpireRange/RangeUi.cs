@@ -73,7 +73,7 @@ internal static class RangeUi
         box.AddChild(energy);
         var seed = new LineEdit { Text = "SPIRE_RANGE", PlaceholderText = "随机种子 / Seed" };
         box.AddChild(seed);
-        box.AddChild(new Label { Text = "初始牌组：5 张所选卡牌；保留角色初始遗物及机制。" });
+        box.AddChild(new Label { Text = "初始牌组：角色初始卡组 + 1 张所选卡牌；保留角色初始遗物及机制。" });
         var status = new Label { Text = "部分怪物依赖同伴或专属场景；首版尚未逐一验证。" };
         box.AddChild(status);
         var start = new Button { Text = "开始测试 / Start", CustomMinimumSize = new Vector2(0, 44) };

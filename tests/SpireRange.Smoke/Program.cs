@@ -34,6 +34,8 @@ try
     {
         Console.WriteLine("PASS: outside the range, the original SaveManager method executes.");
     }
+
+    await LifecycleSmoke.Run(assembly, harmony);
 }
 finally
 {
