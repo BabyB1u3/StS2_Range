@@ -16,7 +16,7 @@ namespace SpireRange;
 internal sealed record RangeConfig(CharacterModel Character, CardModel Card, MonsterModel Monster,
     bool Upgraded, int Energy, string Seed);
 
-internal enum RangeBattleStatus { Preparing, Playing, Victory, Defeat }
+internal enum RangeBattleStatus { Preparing, Playing, Victory, Defeat, Error }
 
 internal static class RangeSession
 {
@@ -24,6 +24,7 @@ internal static class RangeSession
     public static bool IsBusy { get; private set; }
     public static RangeConfig? Config { get; private set; }
     public static RangeBattleStatus BattleStatus { get; private set; }
+    public static string? StartupError { get; private set; }
     private static RunState? _state;
     private static bool _initialized;
 
@@ -49,8 +50,27 @@ internal static class RangeSession
         };
     }
 
-    public static bool CanResetOrExit => IsActive && !IsBusy && !CombatManager.Instance.IsStarting &&
-        !CombatManager.Instance.IsEnding && !RunManager.Instance.ActionExecutor.IsRunning;
+    public static bool CanResetOrExit => IsActive && !IsBusy && (StartupError is not null ||
+        (!CombatManager.Instance.IsStarting && !CombatManager.Instance.IsEnding && !RunManager.Instance.ActionExecutor.IsRunning));
+
+    internal static async Task ObserveCombatStart(Task task, CombatState? combat)
+    {
+        var run = _state;
+        var ownsCombat = IsActive && run is not null && ReferenceEquals(combat?.RunState, run);
+        try { await task; }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            // Only a completed, faulted startup task is recoverable here. A normal
+            // pending startup must retain the usual animation/action guards.
+            if (ownsCombat && IsActive && ReferenceEquals(_state, run))
+            {
+                StartupError = ex.GetBaseException().Message;
+                BattleStatus = RangeBattleStatus.Error;
+            }
+            throw; // Keep the game's original error logging.
+        }
+    }
 
     public static async Task Start(RangeConfig config)
     {
@@ -65,6 +85,7 @@ internal static class RangeSession
             if (IsActive) await Stop(returnToMenu: false);
             config = config with { Seed = RangeSeed.Resolve(config.Seed) };
             Config = config;
+            StartupError = null;
             IsActive = true;
             BattleStatus = RangeBattleStatus.Preparing;
             RangeLocalization.Register();
@@ -121,11 +142,13 @@ internal static class RangeSession
         {
             IsActive = false;
             _state = null;
+            StartupError = null;
         }
     }
 
     private static void EnsureIdle()
     {
+        if (StartupError is not null) return;
         if (CombatManager.Instance.IsStarting || CombatManager.Instance.IsEnding ||
             RunManager.Instance.ActionExecutor.IsRunning)
             throw new InvalidOperationException("请等待当前战斗动画或卡牌效果执行完毕后再操作。");
@@ -160,6 +183,7 @@ internal static class RangeSession
         {
             IsActive = false;
             _state = null;
+            StartupError = null;
         }
     }
 }

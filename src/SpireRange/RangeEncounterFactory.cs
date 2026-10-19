@@ -1,6 +1,8 @@
 using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Encounters;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace SpireRange;
@@ -35,6 +37,20 @@ internal static class RangeEncounterFactory
             // category. Only its initial enemy list is reduced for the practice target.
             MonstersWithSlots.SetValue(encounter,
                 new (MonsterModel, string?)[] { selected });
+            return encounter;
+        }
+
+        if (encounter is PhrogParasiteElite && target is Wriggler)
+        {
+            // Native Wriggler INIT_MOVE branches on wriggler1..4. A generic
+            // encounter has no slot, so none of its opening moves can be chosen.
+            // Use the native scene and the same slot/spawn setup as InfestedPower.
+            var wriggler = (Wriggler)target.ToMutable();
+            wriggler.StartStunned = true;
+            MonstersWithSlots.SetValue(encounter, new (MonsterModel, string?)[]
+            {
+                (wriggler, PhrogParasiteElite.GetWrigglerSlotName(0))
+            });
             return encounter;
         }
 

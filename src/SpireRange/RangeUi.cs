@@ -76,10 +76,12 @@ internal static class RangeUi
         {
             RangeBattleStatus.Victory => " · 胜利",
             RangeBattleStatus.Defeat => " · 失败",
+            RangeBattleStatus.Error => " · 开场失败（Esc 退出）",
             _ => ""
         };
         ui.Info.Text = "靶场 · 种子：" + RangeSession.Config?.Seed + state;
         ui.Info.TooltipText = "靶场 · 种子：" + RangeSession.Config?.Seed + "\n按 Esc 可重置靶场或退出靶场。";
+        if (RangeSession.StartupError is { } error) ui.Info.TooltipText += "\n开场失败：" + error;
         var canLeave = RangeSession.CanResetOrExit;
         ui.VictoryReset.Disabled = ui.VictoryExit.Disabled = !canLeave;
         ui.VictoryPanel.Visible = RangeSession.IsActive && RangeSession.BattleStatus == RangeBattleStatus.Victory
