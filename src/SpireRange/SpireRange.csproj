@@ -6,7 +6,7 @@
     <LangVersion>13</LangVersion>
     <AssemblyName>SpireRange</AssemblyName>
     <GodotProjectDir>$(MSBuildProjectDirectory)/</GodotProjectDir>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <GameDir Condition="'$(GameDir)' == ''">E:\SteamLibrary\steamapps\common\Slay the Spire 2</GameDir>
     <GameDataDir>$(GameDir)\data_sts2_windows_x86_64</GameDataDir>
   </PropertyGroup>

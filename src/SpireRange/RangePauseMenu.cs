@@ -21,13 +21,25 @@ internal static class RangePauseMenu
                 _menu = null; _reset = null; _exit = null;
             };
         _menu = menu;
+        var giveUp = NativeAccess.Get<NPauseMenuButton>(menu, "_giveUpButton");
+        giveUp.Visible = false;
+        giveUp.Disable();
         // Single-player hides this native button. Reuse its slot, texture, hover
         // animation and existing navigation between GiveUp and SaveAndQuit.
         _reset = NativeAccess.Get<NPauseMenuButton>(menu, "_disconnectButton");
         _exit = NativeAccess.Get<NPauseMenuButton>(menu, "_saveAndQuitButton");
         _reset.Visible = true;
-        _reset.GetNode<MegaLabel>("Label").SetTextAutoSize("重置测试");
+        _reset.GetNode<MegaLabel>("Label").SetTextAutoSize("重置靶场");
         _exit.GetNode<MegaLabel>("Label").SetTextAutoSize("退出靶场");
+        var buttons = NativeAccess.Get<Control>(menu, "_buttonContainer").GetChildren()
+            .OfType<NPauseMenuButton>().Where(b => b.Visible).ToArray();
+        for (var i = 0; i < buttons.Length; i++)
+        {
+            var previous = buttons[(i + buttons.Length - 1) % buttons.Length].GetPath();
+            var next = buttons[(i + 1) % buttons.Length].GetPath();
+            buttons[i].FocusNeighborTop = buttons[i].FocusPrevious = previous;
+            buttons[i].FocusNeighborBottom = buttons[i].FocusNext = next;
+        }
         RefreshAvailability();
     }
 
@@ -49,6 +61,12 @@ internal static class RangePauseMenu
         _ = RangeUi.RunBattleAction(reset);
         return true;
     }
+}
+
+[HarmonyPatch(typeof(NPauseMenu), "OnGiveUpButtonPressed")]
+internal static class RangePauseGiveUpPatch
+{
+    private static bool Prefix() => !RangeSession.IsActive;
 }
 
 [HarmonyPatch(typeof(NPauseMenu), nameof(NPauseMenu.Initialize))]

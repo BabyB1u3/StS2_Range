@@ -46,7 +46,7 @@ internal static class RangeUi
         margin.AddChild(result);
         result.AddChild(new Label { Text = "测试胜利", HorizontalAlignment = HorizontalAlignment.Center });
         result.AddChild(new Label { Text = "已击败全部敌人。", HorizontalAlignment = HorizontalAlignment.Center });
-        var reset = RangeSetupScreen.ActionButton("重置测试", true);
+        var reset = RangeSetupScreen.ActionButton("重置靶场", true);
         var exit = RangeSetupScreen.ActionButton("退出靶场");
         result.AddChild(reset); result.AddChild(exit);
         reset.Pressed += () => _ = RunBattleAction(reset: true);
@@ -79,7 +79,7 @@ internal static class RangeUi
             _ => ""
         };
         ui.Info.Text = "靶场 · 种子：" + RangeSession.Config?.Seed + state;
-        ui.Info.TooltipText = "靶场 · 种子：" + RangeSession.Config?.Seed + "\n按 Esc 可重置测试或退出靶场。";
+        ui.Info.TooltipText = "靶场 · 种子：" + RangeSession.Config?.Seed + "\n按 Esc 可重置靶场或退出靶场。";
         var canLeave = RangeSession.CanResetOrExit;
         ui.VictoryReset.Disabled = ui.VictoryExit.Disabled = !canLeave;
         ui.VictoryPanel.Visible = RangeSession.IsActive && RangeSession.BattleStatus == RangeBattleStatus.Victory

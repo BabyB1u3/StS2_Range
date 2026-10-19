@@ -24,6 +24,7 @@ internal static class PauseMenuSmoke
             var menu = (NPauseMenu)RuntimeHelpers.GetUninitializedObject(typeof(NPauseMenu));
             Invoke("RangePauseMenu", "Apply", menu);
             if (Invoke("RangePauseResetPatch", "Prefix") is not true
+                || Invoke("RangePauseGiveUpPatch", "Prefix") is not true
                 || Invoke("RangePauseExitPatch", "Prefix") is not true)
                 throw new Exception("Normal pause menu behavior was intercepted.");
 
@@ -32,6 +33,7 @@ internal static class PauseMenuSmoke
             // Stale clicks must skip the native disconnect/save-and-quit actions,
             // while the busy guard prevents starting a second reset or teardown.
             if (Invoke("RangePauseResetPatch", "Prefix") is not false
+                || Invoke("RangePauseGiveUpPatch", "Prefix") is not false
                 || Invoke("RangePauseExitPatch", "Prefix") is not false
                 || busy.GetValue(null) is not true)
                 throw new Exception("Busy practice actions fell through to native navigation.");
