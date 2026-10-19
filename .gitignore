@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+.godot/
+.tools/
+.local/
+artifacts/
+*.user
+*.suo
+Directory.Build.props.user

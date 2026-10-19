@@ -1,0 +1,11 @@
+{
+  "id": "SpireRange",
+  "name": "靶场 / Spire Range",
+  "author": "StS2_Range contributors",
+  "description": "An isolated practice battle for testing cards against monsters.",
+  "version": "0.1.0",
+  "has_pck": false,
+  "has_dll": true,
+  "affects_gameplay": true,
+  "min_game_version": "0.107.1"
+}
