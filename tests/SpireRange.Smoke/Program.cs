@@ -41,6 +41,7 @@ try
     EncounterSmoke.Run(assembly);
     await BattleStateSmoke.Run(assembly);
     SeedSmoke.Run(assembly);
+    PickerSmoke.Run(assembly, harmony);
 }
 finally
 {

@@ -5,11 +5,14 @@
     <Nullable>enable</Nullable>
     <LangVersion>13</LangVersion>
     <AssemblyName>SpireRange</AssemblyName>
-    <Version>0.1.4</Version>
+    <GodotProjectDir>$(MSBuildProjectDirectory)/</GodotProjectDir>
+    <Version>0.2.0</Version>
     <GameDir Condition="'$(GameDir)' == ''">E:\SteamLibrary\steamapps\common\Slay the Spire 2</GameDir>
     <GameDataDir>$(GameDir)\data_sts2_windows_x86_64</GameDataDir>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Godot.SourceGenerators" Version="4.5.1" PrivateAssets="all" />
+    <CompilerVisibleProperty Include="GodotProjectDir" />
     <Reference Include="sts2" HintPath="$(GameDataDir)\sts2.dll" Private="false" />
     <Reference Include="GodotSharp" HintPath="$(GameDataDir)\GodotSharp.dll" Private="false" />
     <Reference Include="0Harmony" HintPath="$(GameDataDir)\0Harmony.dll" Private="false" />
