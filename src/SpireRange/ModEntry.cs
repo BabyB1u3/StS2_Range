@@ -13,14 +13,14 @@ public static class ModEntry
     {
         new Harmony("StS2Range.SpireRange").PatchAll();
         RangeSession.Initialize();
-        GD.Print("[SpireRange] Loaded 0.2.0 (target: v0.107.1)");
+        GD.Print("[SpireRange] Loaded 0.2.1 (target: v0.107.1)");
     }
 }
 
 [HarmonyPatch(typeof(NRun), nameof(NRun._Process))]
-internal static class RunToolbarUpdatePatch
+internal static class RunBattleUiUpdatePatch
 {
-    private static void Postfix(NRun __instance) => RangeUi.RefreshToolbar(__instance);
+    private static void Postfix(NRun __instance) => RangeUi.RefreshBattleUi(__instance);
 }
 
 [HarmonyPatch(typeof(NMainMenu), nameof(NMainMenu._Ready))]
@@ -35,6 +35,6 @@ internal static class RunUiPatch
     private static void Postfix(NRun __instance)
     {
         if (RangeSession.IsActive)
-            RangeUi.AttachToolbar(__instance);
+            RangeUi.AttachBattleUi(__instance);
     }
 }

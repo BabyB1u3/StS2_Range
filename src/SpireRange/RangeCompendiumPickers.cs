@@ -10,6 +10,8 @@ using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.Bestiary;
 using MegaCrit.Sts2.Core.Nodes.Screens.CardLibrary;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Screens;
+using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Rooms;
 
 namespace SpireRange;
@@ -23,6 +25,8 @@ internal static class RangeCompendiumPickers
         public required NSubmenuStack Stack;
         public required Button Confirm;
         public required Label Caption;
+        public required VBoxContainer Footer;
+        public NInspectCardScreen? Detail;
         public CardModel? Card;
         public MonsterModel? Monster;
         public bool Open;
@@ -31,6 +35,7 @@ internal static class RangeCompendiumPickers
     // Only fresh instances created here are adapted. The stack's normal Compendium
     // cached pages are never registered and retain all their original behavior.
     private static readonly Dictionary<NSubmenu, Picker> Pickers = new(ReferenceEqualityComparer.Instance);
+    private static readonly Dictionary<NInspectCardScreen, Picker> Details = new(ReferenceEqualityComparer.Instance);
     internal static bool IsPicker(NSubmenu screen) => Pickers.ContainsKey(screen);
 
     public static void OpenCards(RangeSetupScreen owner, NSubmenuStack stack)
@@ -40,12 +45,8 @@ internal static class RangeCompendiumPickers
         var screen = NCardLibrary.Create() ?? throw new InvalidOperationException("Card library unavailable.");
         screen.Name = "SpireRangeCardPicker";
         var picker = Register(owner, stack, screen, "选择一张卡牌查看详情，然后确认。", "使用这张卡牌");
-        picker.Confirm.Pressed += () =>
-        {
-            if (picker.Card is null) return;
-            owner.ChooseCard(picker.Card, NativeAccess.Get<NTickbox>(screen, "_viewUpgrades").IsTicked);
-            stack.Pop();
-        };
+        picker.Footer.Visible = false;
+        picker.Confirm.Pressed += () => ConfirmCard(picker);
         stack.AddChild(screen);
         stack.Push(screen);
     }
@@ -57,6 +58,9 @@ internal static class RangeCompendiumPickers
         var screen = NBestiary.Create() ?? throw new InvalidOperationException("Bestiary unavailable.");
         screen.Name = "SpireRangeMonsterPicker";
         var picker = Register(owner, stack, screen, "浏览图鉴并预览怪物，然后确认。", "使用这个怪物");
+        picker.Footer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomLeft);
+        picker.Footer.OffsetLeft = 200; picker.Footer.OffsetTop = -132;
+        picker.Footer.OffsetRight = 680; picker.Footer.OffsetBottom = -30;
         picker.Confirm.Pressed += () =>
         {
             if (picker.Monster is null) return;
@@ -78,7 +82,7 @@ internal static class RangeCompendiumPickers
             CustomMinimumSize = new Vector2(420, 30), HorizontalAlignment = HorizontalAlignment.Center };
         footer.AddChild(caption);
         var confirm = RangeSetupScreen.ActionButton(action, true); confirm.Disabled = true; footer.AddChild(confirm);
-        var picker = new Picker { Owner = owner, Screen = screen, Stack = stack, Caption = caption, Confirm = confirm };
+        var picker = new Picker { Owner = owner, Screen = screen, Stack = stack, Caption = caption, Confirm = confirm, Footer = footer };
         Pickers.Add(screen, picker);
         screen.TreeExiting += () =>
         {
@@ -110,6 +114,7 @@ internal static class RangeCompendiumPickers
     public static void Closing(NSubmenu screen)
     {
         if (!Pickers.TryGetValue(screen, out var picker)) return;
+        if (picker.Detail is { } detail && GodotObject.IsInstanceValid(detail)) CloseDetailImmediately(detail);
         picker.Open = false;
         if (screen is NCardLibrary library)
         {
@@ -125,6 +130,7 @@ internal static class RangeCompendiumPickers
         {
             if (GodotObject.IsInstanceValid(picker.Screen))
             {
+                if (picker.Detail is { } detail && GodotObject.IsInstanceValid(detail)) CloseDetailImmediately(detail);
                 if (picker.Open) picker.Screen.OnSubmenuClosed();
                 picker.Screen.QueueFree();
             }
@@ -161,9 +167,61 @@ internal static class RangeCompendiumPickers
         var cards = grid.VisibleCards.ToList();
         var index = cards.FindIndex(c => c.Id == picker.Card.Id);
         if (index >= 0)
-            MegaCrit.Sts2.Core.Nodes.NGame.Instance!.GetInspectCardScreen().Open(cards, index,
-                NativeAccess.Get<NTickbox>(screen, "_viewUpgrades").IsTicked);
+        {
+            var detail = MegaCrit.Sts2.Core.Nodes.NGame.Instance!.GetInspectCardScreen();
+            picker.Detail = detail;
+            Details[detail] = picker;
+            picker.Footer.Reparent(detail, keepGlobalTransform: false);
+            picker.Footer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomRight);
+            picker.Footer.OffsetLeft = -540; picker.Footer.OffsetTop = -132;
+            picker.Footer.OffsetRight = -60; picker.Footer.OffsetBottom = -30;
+            picker.Footer.Visible = true;
+            detail.Open(cards, index, NativeAccess.Get<NTickbox>(screen, "_viewUpgrades").IsTicked);
+        }
         return true;
+    }
+
+    public static void DetailUpdated(NInspectCardScreen detail)
+    {
+        if (!Details.TryGetValue(detail, out var picker)) return;
+        var selection = ReadDetailSelection(detail);
+        picker.Card = selection.Card;
+        picker.Caption.Text = "已选：" + picker.Card.Title + (selection.Upgraded ? "（已升级）" : "");
+        picker.Confirm.Disabled = false;
+    }
+
+    internal static (CardModel Card, bool Upgraded) ReadDetailSelection(NInspectCardScreen detail)
+    {
+        var cards = NativeAccess.Get<List<CardModel>>(detail, "_cards");
+        var index = NativeAccess.Get<int>(detail, "_index");
+        return (cards[index], NativeAccess.Get<NTickbox>(detail, "_upgradeTickbox").IsTicked && cards[index].IsUpgradable);
+    }
+
+    public static void DetailClosed(NInspectCardScreen detail)
+    {
+        if (!Details.Remove(detail, out var picker)) return;
+        picker.Detail = null;
+        picker.Footer.Visible = false;
+        picker.Footer.Reparent(picker.Screen, keepGlobalTransform: false);
+    }
+
+    private static void ConfirmCard(Picker picker)
+    {
+        if (picker.Card is null || picker.Detail is not { } detail || !picker.Open) return;
+        var selection = ReadDetailSelection(detail); // Includes left/right navigation and the detail tickbox.
+        picker.Owner.ChooseCard(selection.Card, selection.Upgraded);
+        CloseDetailImmediately(detail);
+        if (ReferenceEquals(picker.Stack.Peek(), picker.Screen)) picker.Stack.Pop();
+    }
+
+    private static void CloseDetailImmediately(NInspectCardScreen detail)
+    {
+        // Native Close releases its hotkeys and hover tips. Complete only the visual
+        // fade immediately so the setup can safely become the active screen now.
+        detail.Close();
+        NativeAccess.Get<Tween?>(detail, "_openTween")?.Kill();
+        detail.Visible = false;
+        ActiveScreenContext.Instance.Update();
     }
 
     public static async Task DisplayCards(NCardLibrary screen)

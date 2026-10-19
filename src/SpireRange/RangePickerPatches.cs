@@ -6,8 +6,21 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Cards.Holders;
 using MegaCrit.Sts2.Core.Nodes.Screens.Bestiary;
 using MegaCrit.Sts2.Core.Nodes.Screens.CardLibrary;
+using MegaCrit.Sts2.Core.Nodes.Screens;
 
 namespace SpireRange;
+
+[HarmonyPatch(typeof(NInspectCardScreen), "UpdateCardDisplay")]
+internal static class RangeCardDetailUpdatedPatch
+{
+    private static void Postfix(NInspectCardScreen __instance) => RangeCompendiumPickers.DetailUpdated(__instance);
+}
+
+[HarmonyPatch(typeof(NInspectCardScreen), nameof(NInspectCardScreen.Close))]
+internal static class RangeCardDetailClosedPatch
+{
+    private static void Postfix(NInspectCardScreen __instance) => RangeCompendiumPickers.DetailClosed(__instance);
+}
 
 // Keep the native text/description/upgrade/keyword search. Only its discovery
 // check changes, and only when the closure belongs to our independent picker.

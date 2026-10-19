@@ -5,6 +5,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Screens.Bestiary;
 using MegaCrit.Sts2.Core.Nodes.Screens.CardLibrary;
+using MegaCrit.Sts2.Core.Nodes.Screens;
 
 internal static class PickerSmoke
 {
@@ -18,6 +19,7 @@ internal static class PickerSmoke
 
         var library = (NCardLibrary)RuntimeHelpers.GetUninitializedObject(typeof(NCardLibrary));
         var bestiary = (NBestiary)RuntimeHelpers.GetUninitializedObject(typeof(NBestiary));
+        var detail = (NInspectCardScreen)RuntimeHelpers.GetUninitializedObject(typeof(NInspectCardScreen));
         object? Invoke(string type, string method, params object?[] args) =>
             AccessTools.Method(assembly.GetType("SpireRange." + type)!, method).Invoke(null, args);
 
@@ -25,6 +27,10 @@ internal static class PickerSmoke
             || Invoke("RangeBestiaryEntriesPatch", "Prefix", bestiary) is not true
             || Invoke("RangeCardDisplayPatch", "Prefix", library, null) is not true)
             throw new Exception("An original Compendium page was intercepted.");
+        // Normal inspection has no registered picker; these callbacks must return
+        // without accessing native controls, reparenting anything or changing input.
+        Invoke("RangeCompendiumPickers", "DetailUpdated", detail);
+        Invoke("RangeCompendiumPickers", "DetailClosed", detail);
 
         var id = new ModelId("CARD", "TEST_CARD");
         var discovered = new HashSet<ModelId>();

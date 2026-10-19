@@ -12,7 +12,6 @@ public partial class RangeSetupScreen : NSubmenu
 {
     private NMainMenu _menu = null!;
     private OptionButton _character = null!;
-    private CheckBox _upgraded = null!;
     private SpinBox _energy = null!;
     private LineEdit _seed = null!;
     private Label _cardName = null!;
@@ -24,7 +23,7 @@ public partial class RangeSetupScreen : NSubmenu
     internal CardModel? SelectedCard { get; private set; }
     internal MonsterModel? SelectedMonster { get; private set; }
     internal CharacterModel SelectedCharacter => _characters[_character.Selected];
-    internal bool Upgraded => _upgraded.ButtonPressed;
+    internal bool Upgraded { get; private set; }
     protected override Control InitialFocusedControl => _character;
 
     public static RangeSetupScreen Create(NMainMenu menu)
@@ -77,8 +76,8 @@ public partial class RangeSetupScreen : NSubmenu
     internal void ChooseCard(CardModel card, bool upgraded)
     {
         SelectedCard = ModelDb.GetById<CardModel>(card.Id);
-        _upgraded.ButtonPressed = upgraded;
-        _cardName.Text = SelectedCard.Title;
+        Upgraded = upgraded && SelectedCard.IsUpgradable;
+        _cardName.Text = SelectedCard.Title + (Upgraded ? "（已升级）" : "");
         _start.Disabled = SelectedMonster is null;
     }
 
@@ -135,9 +134,11 @@ public partial class RangeSetupScreen : NSubmenu
             () => RangeCompendiumPickers.OpenCards(this, _stack));
         _monsterName = ChoiceTile(choices, "目标怪物", "尚未选择怪物", "打开怪物图鉴",
             () => RangeCompendiumPickers.OpenMonsters(this, _stack));
-        var options = new HBoxContainer(); options.AddThemeConstantOverride("separation", 32); body.AddChild(options);
-        _upgraded = new CheckBox { Text = "升级测试卡牌" }; options.AddChild(_upgraded);
-        options.AddChild(Text("每回合基础能量", 22));
+        var options = new HBoxContainer(); options.AddThemeConstantOverride("separation", 16); body.AddChild(options);
+        var energyLabel = Text("每回合基础能量", 22);
+        energyLabel.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
+        energyLabel.AutowrapMode = TextServer.AutowrapMode.Off;
+        options.AddChild(energyLabel);
         _energy = new SpinBox { MinValue = 0, MaxValue = 99, Value = 3, Step = 1, CustomMinimumSize = new Vector2(150, 48) };
         options.AddChild(_energy);
         _seed = new LineEdit { PlaceholderText = "随机种子（选填，留空则随机）", CustomMinimumSize = new Vector2(0, 50) };

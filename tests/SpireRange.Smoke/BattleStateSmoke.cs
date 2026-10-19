@@ -7,7 +7,7 @@ using MegaCrit.Sts2.Core.Runs;
 
 internal static class BattleStateSmoke
 {
-    public static async Task Run(Assembly mod)
+    public static void Run(Assembly mod)
     {
         var session = mod.GetType("SpireRange.RangeSession")!;
         AccessTools.Method(session, "Initialize").Invoke(null, null);
@@ -39,17 +39,11 @@ internal static class BattleStateSmoke
             Raise("CombatEnded", room);
             if (status.GetValue(null)!.ToString() != "Victory")
                 throw new Exception("Victory was lost when the combat-ended event followed combat-won.");
-            if (AccessTools.Method(session, "AddCardDisabledReason").Invoke(null, null) is null)
-                throw new Exception("Adding a card is still available after victory.");
-            await (Task)AccessTools.Method(session, "AddCard").Invoke(null, null)!;
-
             Raise("CombatSetUp", combat);
             Raise("CombatEnded", room);
-            if (status.GetValue(null)!.ToString() != "Defeat" ||
-                AccessTools.Method(session, "AddCardDisabledReason").Invoke(null, null) is null)
-                throw new Exception("Adding a card is still available after defeat.");
-            await (Task)AccessTools.Method(session, "AddCard").Invoke(null, null)!;
-            Console.WriteLine("PASS: native combat events preserve victory/defeat and stale add-card clicks safely do nothing after either result.");
+            if (status.GetValue(null)!.ToString() != "Defeat")
+                throw new Exception("Combat ending without victory did not preserve defeat.");
+            Console.WriteLine("PASS: native combat events preserve victory/defeat and ignore unrelated combats.");
         }
         finally
         {

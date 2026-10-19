@@ -39,9 +39,10 @@ try
     await LifecycleSmoke.Run(assembly, harmony);
     GameOverSmoke.Run(assembly, save, harmony);
     EncounterSmoke.Run(assembly);
-    await BattleStateSmoke.Run(assembly);
+    BattleStateSmoke.Run(assembly);
     SeedSmoke.Run(assembly);
     PickerSmoke.Run(assembly, harmony);
+    PauseMenuSmoke.Run(assembly, harmony);
 }
 finally
 {

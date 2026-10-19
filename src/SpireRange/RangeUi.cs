@@ -1,38 +1,37 @@
 using Godot;
-using MegaCrit.Sts2.Core.Localization;
-using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Screens.Capstones;
+using MegaCrit.Sts2.addons.mega_text;
 
 namespace SpireRange;
 
 internal static class RangeUi
 {
-    private sealed record Toolbar(NRun Owner, Label Status, Button Add, Button Reset, Button Exit,
+    private sealed record BattleUi(NRun Owner, MegaLabel Info, Control Left, Control Right,
         CenterContainer VictoryPanel, Button VictoryReset, Button VictoryExit);
-    private static Toolbar? _toolbar;
+    private static BattleUi? _battleUi;
     public static void AttachMenu(NMainMenu menu) => RangeMenu.Attach(menu);
 
-    public static void AttachToolbar(NRun run)
+    public static void AttachBattleUi(NRun run)
     {
-        var layer = new CanvasLayer { Name = "SpireRangeToolbar", Layer = 100 };
-        run.AddChild(layer);
-        var panel = new PanelContainer { Position = new Vector2(16, 100), CustomMinimumSize = new Vector2(260, 0) };
-        layer.AddChild(panel);
-        var box = new VBoxContainer();
-        panel.AddChild(box);
-        box.AddChild(new Label { Text = "靶场 / Practice Range" });
-        box.AddChild(new Label { Text = "种子 / Seed: " + RangeSession.Config?.Seed });
-        var status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(300, 0) };
-        box.AddChild(status);
-        var error = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(300, 0) };
-        box.AddChild(error);
-        Task Reset() => RangeSession.Start(
-            RangeSession.Config ?? throw new InvalidOperationException("Missing configuration."));
-        var add = AddAction(box, "再加一张测试卡 / Add card", RangeSession.AddCard, error);
-        var reset = AddAction(box, "重置同一测试 / Reset", Reset, error);
-        var exit = AddAction(box, "退出靶场 / Exit", RangeSession.Exit, error);
+        var bar = run.GlobalUi.TopBar;
+        // Copy the native timer label's font, gold color, shadow and outline.
+        // This is a sibling of the timer, so timer visibility never hides our seed.
+        var info = (MegaLabel)bar.Timer.GetNode<MegaLabel>("TimerLabel").Duplicate(
+            (int)(Node.DuplicateFlags.Groups | Node.DuplicateFlags.Scripts | Node.DuplicateFlags.UseInstantiation));
+        info.Name = "SpireRangeInfo";
+        info.CustomMinimumSize = Vector2.Zero;
+        info.MouseFilter = Control.MouseFilterEnum.Pass;
+        info.HorizontalAlignment = HorizontalAlignment.Center;
+        info.ClipText = true;
+        info.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        bar.AddChild(info);
+        info.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.TopLeft);
 
+        var layer = new CanvasLayer { Name = "SpireRangeResult", Layer = 5 };
+        run.AddChild(layer);
         var victory = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         layer.AddChild(victory);
         victory.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
@@ -45,58 +44,65 @@ internal static class RangeUi
         var result = new VBoxContainer();
         result.AddThemeConstantOverride("separation", 16);
         margin.AddChild(result);
-        result.AddChild(new Label { Text = "测试胜利 / Victory", HorizontalAlignment = HorizontalAlignment.Center });
-        result.AddChild(new Label { Text = "已击败全部敌人。请选择下一步。", HorizontalAlignment = HorizontalAlignment.Center });
-        var victoryReset = AddAction(result, "重置同一测试 / Reset", Reset, error);
-        var victoryExit = AddAction(result, "返回主菜单 / Main menu", RangeSession.Exit, error);
-        _toolbar = new Toolbar(run, status, add, reset, exit, victory, victoryReset, victoryExit);
-        run.TreeExiting += () => { if (ReferenceEquals(_toolbar?.Owner, run)) _toolbar = null; };
-        RefreshToolbar(run);
+        result.AddChild(new Label { Text = "测试胜利", HorizontalAlignment = HorizontalAlignment.Center });
+        result.AddChild(new Label { Text = "已击败全部敌人。", HorizontalAlignment = HorizontalAlignment.Center });
+        var reset = RangeSetupScreen.ActionButton("重置测试", true);
+        var exit = RangeSetupScreen.ActionButton("退出靶场");
+        result.AddChild(reset); result.AddChild(exit);
+        reset.Pressed += () => _ = RunBattleAction(reset: true);
+        exit.Pressed += () => _ = RunBattleAction(reset: false);
+        _battleUi = new BattleUi(run, info, bar.GetNode<Control>("LeftAlignedStuff"),
+            bar.GetNode<Control>("RightAlignedStuff"), victory, reset, exit);
+        run.TreeExiting += () => { if (ReferenceEquals(_battleUi?.Owner, run)) _battleUi = null; };
+        RefreshBattleUi(run);
     }
 
-    public static void RefreshToolbar(NRun run)
+    public static void RefreshBattleUi(NRun run)
     {
-        var ui = _toolbar;
-        if (ui is null || !ReferenceEquals(ui.Owner, run) || !GodotObject.IsInstanceValid(ui.Status)) return;
-        var reason = RangeSession.AddCardDisabledReason();
-        ui.Add.Disabled = reason is not null;
-        ui.Add.TooltipText = reason ?? "将一张测试卡牌加入手牌。";
+        var ui = _battleUi;
+        if (ui is null || !ReferenceEquals(ui.Owner, run) || !GodotObject.IsInstanceValid(ui.Info)) return;
+        var bar = run.GlobalUi.TopBar;
+        var inverse = bar.GetGlobalTransform().AffineInverse();
+        var left = ui.Left.GetChildren().OfType<Control>().Where(c => c.Visible)
+            .Select(c => (inverse * c.GetGlobalRect().End).X).DefaultIfEmpty(0).Max();
+        var right = ui.Right.GetChildren().OfType<Control>().Where(c => c.Visible)
+            .Select(c => (inverse * c.GlobalPosition).X).DefaultIfEmpty(bar.Size.X).Min();
+        var width = Math.Max(0, right - left - 32);
+        ui.Info.Position = new Vector2(left + 16, 0);
+        ui.Info.Size = new Vector2(width, 80);
+        var fontSize = width >= 440 ? 28 : 22;
+        if (ui.Info.GetThemeFontSize("font_size") != fontSize) ui.Info.AddThemeFontSizeOverride("font_size", fontSize);
+        var state = RangeSession.BattleStatus switch
+        {
+            RangeBattleStatus.Victory => " · 胜利",
+            RangeBattleStatus.Defeat => " · 失败",
+            _ => ""
+        };
+        ui.Info.Text = "靶场 · 种子：" + RangeSession.Config?.Seed + state;
+        ui.Info.TooltipText = "靶场 · 种子：" + RangeSession.Config?.Seed + "\n按 Esc 可重置测试或退出靶场。";
         var canLeave = RangeSession.CanResetOrExit;
-        ui.Reset.Disabled = ui.Exit.Disabled = ui.VictoryReset.Disabled = ui.VictoryExit.Disabled = !canLeave;
-        ui.Status.Text = RangeSession.BattleStatus switch
-        {
-            RangeBattleStatus.Victory => "测试胜利，已击败全部敌人。可重置或退出。",
-            RangeBattleStatus.Defeat => "测试失败。可重置同一测试或退出。",
-            _ => reason ?? "可正常出牌、结束回合。"
-        };
-        ui.VictoryPanel.Visible = RangeSession.IsActive && RangeSession.BattleStatus == RangeBattleStatus.Victory;
+        ui.VictoryReset.Disabled = ui.VictoryExit.Disabled = !canLeave;
+        ui.VictoryPanel.Visible = RangeSession.IsActive && RangeSession.BattleStatus == RangeBattleStatus.Victory
+            && NCapstoneContainer.Instance?.InUse != true;
+        RangePauseMenu.RefreshAvailability();
     }
 
-    private static Button AddAction(VBoxContainer box, string text, Func<Task> action, Label status)
+    internal static async Task RunBattleAction(bool reset)
     {
-        var button = new Button { Text = text };
-        box.AddChild(button);
-        button.Pressed += async () =>
+        if (!RangeSession.CanResetOrExit) return;
+        try
         {
-            if (RangeSession.IsBusy) return;
-            status.Text = "";
-            button.Disabled = true;
-            await RunAction(action, status);
-            if (GodotObject.IsInstanceValid(button)) button.Disabled = false;
-            if (_toolbar is { } ui) RefreshToolbar(ui.Owner);
-        };
-        return button;
-    }
-
-    private static async Task RunAction(Func<Task> action, Label status)
-    {
-        try { await action(); }
+            // Release the native pause menu's input blocker before resetting the run.
+            if (NCapstoneContainer.Instance?.InUse == true) NCapstoneContainer.Instance.Close();
+            if (reset)
+                await RangeSession.Start(RangeSession.Config ?? throw new InvalidOperationException("Missing configuration."));
+            else
+                await RangeSession.Exit();
+        }
         catch (Exception ex)
         {
             GD.PrintErr($"[SpireRange] {ex}");
-            if (GodotObject.IsInstanceValid(status)) status.Text = "操作失败，详情见日志：" + ex.Message;
-            else OS.Alert(ex.Message, "Spire Range");
+            OS.Alert(ex.Message, "Spire Range");
         }
     }
-
 }

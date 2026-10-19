@@ -49,23 +49,6 @@ internal static class RangeSession
         };
     }
 
-    public static string? AddCardDisabledReason()
-    {
-        if (!IsActive) return "当前不在靶场。";
-        if (BattleStatus == RangeBattleStatus.Victory) return "测试胜利，可重置或退出。";
-        if (BattleStatus == RangeBattleStatus.Defeat) return "测试失败，可重置或退出。";
-        if (IsBusy || BattleStatus == RangeBattleStatus.Preparing || CombatManager.Instance.IsStarting)
-            return "正在准备战斗，请稍候。";
-        if (_state is null || !CombatManager.Instance.IsInProgress || _state.IsGameOver)
-            return "战斗已结束，可重置或退出。";
-        var player = _state.Players[0];
-        if (CombatManager.Instance.PlayerActionsDisabled || player.PlayerCombatState?.Phase != PlayerTurnPhase.Play)
-            return "等待玩家出牌阶段。";
-        if (RunManager.Instance.ActionExecutor.IsRunning) return "等待当前卡牌效果执行完毕。";
-        if (PileType.Hand.GetPile(player).Cards.Count >= CardPile.MaxCardsInHand) return "手牌已满。";
-        return null;
-    }
-
     public static bool CanResetOrExit => IsActive && !IsBusy && !CombatManager.Instance.IsStarting &&
         !CombatManager.Instance.IsEnding && !RunManager.Instance.ActionExecutor.IsRunning;
 
@@ -119,24 +102,6 @@ internal static class RangeSession
         {
             if (IsActive) await Stop();
             throw;
-        }
-        finally { IsBusy = false; }
-    }
-
-    public static async Task AddCard()
-    {
-        // Stale clicks during a phase change are an ordinary unavailable action,
-        // not an exception or a game error.
-        if (Config is null || _state is null || AddCardDisabledReason() is not null) return;
-        IsBusy = true;
-        try
-        {
-            var player = _state.Players[0];
-            var combat = CombatManager.Instance.DebugOnlyGetState()
-                ?? throw new InvalidOperationException("Combat state is not ready.");
-            var card = combat.CreateCard(Config.Card, player);
-            if (Config.Upgraded && card.IsUpgradable) CardCmd.Upgrade(card);
-            await CardPileCmd.Add(card, PileType.Hand);
         }
         finally { IsBusy = false; }
     }
