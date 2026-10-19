@@ -1,6 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Rooms;
 
 namespace SpireRange;
 
@@ -12,6 +13,7 @@ internal static class RangeNavigationPatch
     {
         yield return AccessTools.Method(typeof(RunManager), nameof(RunManager.EnterMapCoord));
         yield return AccessTools.Method(typeof(RunManager), nameof(RunManager.ProceedFromTerminalRewardsScreen));
+        yield return AccessTools.Method(typeof(CombatRoom), nameof(CombatRoom.OfferRoomEndRewards));
     }
 
     private static bool Prefix(ref Task __result)

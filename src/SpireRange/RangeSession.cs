@@ -7,7 +7,6 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
-using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Unlocks;
@@ -33,14 +32,19 @@ internal static class RangeSession
         IsBusy = true;
         try
         {
-            if (IsActive) await Stop();
+            if (IsActive) await Stop(returnToMenu: false);
             Config = config;
             IsActive = true;
             RangeLocalization.Register();
+            var source = RangeEncounterFactory.FindSource(config.Monster)
+                ?? throw new InvalidOperationException("未找到所选怪物的原版遭遇。");
+            var acts = ActModel.GetDefaultList().ToList();
+            acts[source.ActIndex] = source.Act;
             var player = Player.CreateForNewRun(config.Character, UnlockState.all, 1UL);
             _state = RunState.CreateForNewRun(new[] { player },
-                ActModel.GetDefaultList().Select(a => a.ToMutable()).ToArray(),
+                acts.Select(a => a.ToMutable()).ToArray(),
                 Array.Empty<ModifierModel>(), GameMode.Standard, 0, config.Seed);
+            _state.CurrentActIndex = source.ActIndex;
             var manager = RunManager.Instance;
             manager.SetUpNewSingleplayer(_state, shouldSave: false);
             manager.CombatReplayWriter.IsEnabled = false;
@@ -51,17 +55,15 @@ internal static class RangeSession
             player.Deck.AddInternal(card, silent: true);
             player.MaxEnergy = config.Energy;
             await PreloadManager.LoadRunAssets(new[] { config.Character });
-            await PreloadManager.LoadActAssets(_state.Act);
+            await PreloadManager.LoadActAssets(_state.Acts[source.ActIndex]);
             await manager.FinalizeStartingRelics();
             manager.Launch();
             var game = NGame.Instance ?? throw new InvalidOperationException("Game scene is not ready.");
             game.RootSceneContainer.SetCurrentScene(NRun.Create(_state));
-            await manager.SetActInternal(0);
+            await manager.SetActInternal(source.ActIndex);
 
-            ModelDb.Inject(typeof(RangeEncounter));
-            var encounter = (RangeEncounter)ModelDb.Encounter<RangeEncounter>().ToMutable();
-            encounter.Target = config.Monster;
-            await manager.EnterRoomDebug(RoomType.Monster, MapPointType.Monster, encounter);
+            var encounter = RangeEncounterFactory.Prepare(source.Encounter, config.Monster, _state);
+            await manager.EnterRoomDebug(encounter.RoomType, MapPointType.Unassigned, encounter);
             GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Card.Id} / {config.Monster.Id}");
         }
         catch
@@ -121,15 +123,30 @@ internal static class RangeSession
             throw new InvalidOperationException("请等待当前战斗动画或卡牌效果执行完毕后再操作。");
     }
 
-    private static async Task Stop()
+    private static async Task Stop(bool returnToMenu = true)
     {
         try
         {
-            // false is reserved for process shutdown and leaves CombatManager's state intact.
-            // Reset and exit both need a full teardown before another battle can be set up.
-            RunManager.Instance.CleanUp(graceful: true);
-            await PreloadManager.LoadMainMenuEssentials();
-            NGame.Instance?.RootSceneContainer.SetCurrentScene(NMainMenu.Create(openTimeline: false));
+            var game = NGame.Instance;
+            if (returnToMenu && game is not null)
+            {
+                // The native flow loads the complete menu asset set before constructing
+                // settings submenus. MainMenuEssentials alone is insufficient after death.
+                await game.ReturnToMainMenu();
+            }
+            else
+            {
+                if (game is not null) await game.Transition.FadeOut();
+                RunManager.Instance.CleanUp(graceful: true);
+                if (game is not null)
+                {
+                    game.SetScreenShakeTarget(game);
+                    game.RootSceneContainer.SetCurrentScene(new Control());
+                    // Flush queued game-over/old-run nodes and their cancelled animations
+                    // before loading assets and creating the replacement combat scene.
+                    await game.ToSignal(game.GetTree(), SceneTree.SignalName.ProcessFrame);
+                }
+            }
         }
         finally
         {

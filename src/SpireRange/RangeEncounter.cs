@@ -7,7 +7,8 @@ namespace SpireRange;
 public sealed class RangeEncounter : EncounterModel
 {
     public MonsterModel? Target { get; set; }
-    public override RoomType RoomType => RoomType.Monster;
+    public RoomType RoomKind { get; set; } = RoomType.Monster;
+    public override RoomType RoomType => RoomKind;
     public override bool ShouldGiveRewards => false;
     public override bool IsDebugEncounter => true;
     public override IEnumerable<MonsterModel> AllPossibleMonsters =>

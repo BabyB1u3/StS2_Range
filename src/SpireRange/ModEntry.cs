@@ -12,7 +12,7 @@ public static class ModEntry
     public static void Initialize()
     {
         new Harmony("StS2Range.SpireRange").PatchAll();
-        GD.Print("[SpireRange] Loaded 0.1.2 (target: v0.107.1)");
+        GD.Print("[SpireRange] Loaded 0.1.3 (target: v0.107.1)");
     }
 }
 

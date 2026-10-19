@@ -12,7 +12,7 @@ internal static class LifecycleSmoke
     {
         // Run the mod's actual Stop path and the game's real CombatManager.Reset.
         // Replace UI/resource/network boundaries so no running game or profile is needed.
-        foreach (var patch in new[] { typeof(CleanupBoundary), typeof(PreloadBoundary), typeof(NetworkBoundary) })
+        foreach (var patch in new[] { typeof(CleanupBoundary), typeof(NetworkBoundary) })
             harmony.CreateClassProcessor(patch).Patch();
 
         var session = mod.GetType("SpireRange.RangeSession", throwOnError: true)!;
@@ -25,17 +25,17 @@ internal static class LifecycleSmoke
             RuntimeHelpers.GetUninitializedObject(typeof(ActionQueueSynchronizer)));
         try
         {
-            for (var cycle = 0; cycle < 3; cycle++)
+            foreach (var returnToMenu in new[] { true, false, false, true })
             {
                 combatState.SetValue(CombatManager.Instance, new CombatState());
                 active.SetValue(null, true);
-                await (Task)stop.Invoke(null, null)!;
+                await (Task)stop.Invoke(null, new object[] { returnToMenu })!;
                 if (combatState.GetValue(CombatManager.Instance) is not null)
                     throw new Exception("Exiting the range left stale combat state; the next battle would fail.");
                 if ((bool)active.GetValue(null)!)
                     throw new Exception("Exiting the range left the session active.");
             }
-            Console.WriteLine("PASS: three range teardowns clear the game's real combat state for the next battle.");
+            Console.WriteLine("PASS: exit and direct-reset teardowns clear the game's real combat state for the next battle.");
         }
         finally
         {
@@ -51,16 +51,6 @@ internal static class LifecycleSmoke
         private static bool Prefix(bool graceful)
         {
             CombatManager.Instance.Reset(graceful);
-            return false;
-        }
-    }
-
-    [HarmonyPatch(typeof(PreloadManager), nameof(PreloadManager.LoadMainMenuEssentials))]
-    private static class PreloadBoundary
-    {
-        private static bool Prefix(ref Task __result)
-        {
-            __result = Task.CompletedTask;
             return false;
         }
     }

@@ -38,6 +38,7 @@ try
 
     await LifecycleSmoke.Run(assembly, harmony);
     GameOverSmoke.Run(assembly, save, harmony);
+    EncounterSmoke.Run(assembly);
 }
 finally
 {
