@@ -8,6 +8,9 @@ namespace SpireRange;
 
 internal static class RangeUi
 {
+    private sealed record Toolbar(NRun Owner, Label Status, Button Add, Button Reset, Button Exit,
+        CenterContainer VictoryPanel, Button VictoryReset, Button VictoryExit);
+    private static Toolbar? _toolbar;
     public static void AttachMenu(NMainMenu menu)
     {
         RangeSession.OnMainMenuReached();
@@ -111,7 +114,8 @@ internal static class RangeUi
         box.AddChild(new Label { Text = "每回合基础能量 / Base energy per turn" });
         var energy = new SpinBox { MinValue = 0, MaxValue = 99, Step = 1, Value = 3 };
         box.AddChild(energy);
-        var seed = new LineEdit { Text = "SPIRE_RANGE", PlaceholderText = "随机种子 / Seed" };
+        box.AddChild(new Label { Text = "随机种子：留空则新测试随机；重置保留本次种子。" });
+        var seed = new LineEdit { PlaceholderText = "留空随机 / Optional seed" };
         box.AddChild(seed);
         box.AddChild(new Label { Text = "初始牌组：角色初始卡组 + 1 张所选卡牌；保留角色初始遗物及机制。" });
         var status = new Label { Text = "部分怪物依赖同伴或专属场景；首版尚未逐一验证。" };
@@ -127,7 +131,7 @@ internal static class RangeUi
             }
             var config = new RangeConfig(characters[character.Selected], visibleCards[cardChoice.Selected],
                 visibleMonsters[monsterChoice.Selected], upgraded.ButtonPressed, (int)energy.Value,
-                string.IsNullOrWhiteSpace(seed.Text) ? "SPIRE_RANGE" : seed.Text.Trim());
+                seed.Text.Trim());
             start.Disabled = true;
             await RunAction(() => RangeSession.Start(config), status);
             if (GodotObject.IsInstanceValid(start)) start.Disabled = false;
@@ -146,25 +150,70 @@ internal static class RangeUi
         var box = new VBoxContainer();
         panel.AddChild(box);
         box.AddChild(new Label { Text = "靶场 / Practice Range" });
-        var status = new Label { Text = "可正常出牌、结束回合。" };
+        box.AddChild(new Label { Text = "种子 / Seed: " + RangeSession.Config?.Seed });
+        var status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(300, 0) };
         box.AddChild(status);
-        AddAction(box, "再加一张测试卡 / Add card", RangeSession.AddCard, status);
-        AddAction(box, "重置同一测试 / Reset", () => RangeSession.Start(
-            RangeSession.Config ?? throw new InvalidOperationException("Missing configuration.")), status);
-        AddAction(box, "退出靶场 / Exit", RangeSession.Exit, status);
+        var error = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(300, 0) };
+        box.AddChild(error);
+        Task Reset() => RangeSession.Start(
+            RangeSession.Config ?? throw new InvalidOperationException("Missing configuration."));
+        var add = AddAction(box, "再加一张测试卡 / Add card", RangeSession.AddCard, error);
+        var reset = AddAction(box, "重置同一测试 / Reset", Reset, error);
+        var exit = AddAction(box, "退出靶场 / Exit", RangeSession.Exit, error);
+
+        var victory = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        layer.AddChild(victory);
+        victory.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var resultPanel = new PanelContainer { CustomMinimumSize = new Vector2(480, 0) };
+        victory.AddChild(resultPanel);
+        var margin = new MarginContainer();
+        foreach (var side in new[] { "left", "right", "top", "bottom" })
+            margin.AddThemeConstantOverride("margin_" + side, 24);
+        resultPanel.AddChild(margin);
+        var result = new VBoxContainer();
+        result.AddThemeConstantOverride("separation", 16);
+        margin.AddChild(result);
+        result.AddChild(new Label { Text = "测试胜利 / Victory", HorizontalAlignment = HorizontalAlignment.Center });
+        result.AddChild(new Label { Text = "已击败全部敌人。请选择下一步。", HorizontalAlignment = HorizontalAlignment.Center });
+        var victoryReset = AddAction(result, "重置同一测试 / Reset", Reset, error);
+        var victoryExit = AddAction(result, "返回主菜单 / Main menu", RangeSession.Exit, error);
+        _toolbar = new Toolbar(run, status, add, reset, exit, victory, victoryReset, victoryExit);
+        run.TreeExiting += () => { if (ReferenceEquals(_toolbar?.Owner, run)) _toolbar = null; };
+        RefreshToolbar(run);
     }
 
-    private static void AddAction(VBoxContainer box, string text, Func<Task> action, Label status)
+    public static void RefreshToolbar(NRun run)
+    {
+        var ui = _toolbar;
+        if (ui is null || !ReferenceEquals(ui.Owner, run) || !GodotObject.IsInstanceValid(ui.Status)) return;
+        var reason = RangeSession.AddCardDisabledReason();
+        ui.Add.Disabled = reason is not null;
+        ui.Add.TooltipText = reason ?? "将一张测试卡牌加入手牌。";
+        var canLeave = RangeSession.CanResetOrExit;
+        ui.Reset.Disabled = ui.Exit.Disabled = ui.VictoryReset.Disabled = ui.VictoryExit.Disabled = !canLeave;
+        ui.Status.Text = RangeSession.BattleStatus switch
+        {
+            RangeBattleStatus.Victory => "测试胜利，已击败全部敌人。可重置或退出。",
+            RangeBattleStatus.Defeat => "测试失败。可重置同一测试或退出。",
+            _ => reason ?? "可正常出牌、结束回合。"
+        };
+        ui.VictoryPanel.Visible = RangeSession.IsActive && RangeSession.BattleStatus == RangeBattleStatus.Victory;
+    }
+
+    private static Button AddAction(VBoxContainer box, string text, Func<Task> action, Label status)
     {
         var button = new Button { Text = text };
         box.AddChild(button);
         button.Pressed += async () =>
         {
             if (RangeSession.IsBusy) return;
+            status.Text = "";
             button.Disabled = true;
             await RunAction(action, status);
             if (GodotObject.IsInstanceValid(button)) button.Disabled = false;
+            if (_toolbar is { } ui) RefreshToolbar(ui.Owner);
         };
+        return button;
     }
 
     private static async Task RunAction(Func<Task> action, Label status)

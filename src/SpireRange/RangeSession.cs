@@ -16,15 +16,62 @@ namespace SpireRange;
 internal sealed record RangeConfig(CharacterModel Character, CardModel Card, MonsterModel Monster,
     bool Upgraded, int Energy, string Seed);
 
+internal enum RangeBattleStatus { Preparing, Playing, Victory, Defeat }
+
 internal static class RangeSession
 {
     public static bool IsActive { get; private set; }
     public static bool IsBusy { get; private set; }
     public static RangeConfig? Config { get; private set; }
+    public static RangeBattleStatus BattleStatus { get; private set; }
     private static RunState? _state;
+    private static bool _initialized;
+
+    public static void Initialize()
+    {
+        if (_initialized) return;
+        _initialized = true;
+        CombatManager.Instance.CombatSetUp += combat =>
+        {
+            if (IsActive && ReferenceEquals(combat.RunState, _state))
+                BattleStatus = RangeBattleStatus.Playing;
+        };
+        CombatManager.Instance.CombatWon += room =>
+        {
+            if (IsActive && ReferenceEquals(room.CombatState.RunState, _state))
+                BattleStatus = RangeBattleStatus.Victory;
+        };
+        CombatManager.Instance.CombatEnded += room =>
+        {
+            if (IsActive && ReferenceEquals(room.CombatState.RunState, _state) &&
+                BattleStatus != RangeBattleStatus.Victory)
+                BattleStatus = RangeBattleStatus.Defeat;
+        };
+    }
+
+    public static string? AddCardDisabledReason()
+    {
+        if (!IsActive) return "当前不在靶场。";
+        if (BattleStatus == RangeBattleStatus.Victory) return "测试胜利，可重置或退出。";
+        if (BattleStatus == RangeBattleStatus.Defeat) return "测试失败，可重置或退出。";
+        if (IsBusy || BattleStatus == RangeBattleStatus.Preparing || CombatManager.Instance.IsStarting)
+            return "正在准备战斗，请稍候。";
+        if (_state is null || !CombatManager.Instance.IsInProgress || _state.IsGameOver)
+            return "战斗已结束，可重置或退出。";
+        var player = _state.Players[0];
+        if (CombatManager.Instance.PlayerActionsDisabled || player.PlayerCombatState?.Phase != PlayerTurnPhase.Play)
+            return "等待玩家出牌阶段。";
+        if (RunManager.Instance.ActionExecutor.IsRunning) return "等待当前卡牌效果执行完毕。";
+        if (PileType.Hand.GetPile(player).Cards.Count >= CardPile.MaxCardsInHand) return "手牌已满。";
+        return null;
+    }
+
+    public static bool CanResetOrExit => IsActive && !IsBusy && !CombatManager.Instance.IsStarting &&
+        !CombatManager.Instance.IsEnding && !RunManager.Instance.ActionExecutor.IsRunning;
 
     public static async Task Start(RangeConfig config)
     {
+        Initialize();
         if (IsBusy) return;
         if (!IsActive && RunManager.Instance.IsInProgress)
             throw new InvalidOperationException("请先返回主菜单再进入靶场。");
@@ -33,8 +80,10 @@ internal static class RangeSession
         try
         {
             if (IsActive) await Stop(returnToMenu: false);
+            config = config with { Seed = RangeSeed.Resolve(config.Seed) };
             Config = config;
             IsActive = true;
+            BattleStatus = RangeBattleStatus.Preparing;
             RangeLocalization.Register();
             var source = RangeEncounterFactory.FindSource(config.Monster)
                 ?? throw new InvalidOperationException("未找到所选怪物的原版遭遇。");
@@ -64,7 +113,7 @@ internal static class RangeSession
 
             var encounter = RangeEncounterFactory.Prepare(source.Encounter, config.Monster, _state);
             await manager.EnterRoomDebug(encounter.RoomType, MapPointType.Unassigned, encounter);
-            GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Card.Id} / {config.Monster.Id}");
+            GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Card.Id} / {config.Monster.Id} / seed={config.Seed}");
         }
         catch
         {
@@ -76,21 +125,15 @@ internal static class RangeSession
 
     public static async Task AddCard()
     {
-        if (!IsActive || IsBusy || Config is null || _state is null) return;
-        if (!CombatManager.Instance.IsInProgress)
-            throw new InvalidOperationException("当前战斗已结束，请重置靶场。");
+        // Stale clicks during a phase change are an ordinary unavailable action,
+        // not an exception or a game error.
+        if (Config is null || _state is null || AddCardDisabledReason() is not null) return;
         IsBusy = true;
         try
         {
             var player = _state.Players[0];
-            if (PileType.Hand.GetPile(player).Cards.Count >= CardPile.MaxCardsInHand)
-                throw new InvalidOperationException("手牌已满。");
             var combat = CombatManager.Instance.DebugOnlyGetState()
                 ?? throw new InvalidOperationException("Combat state is not ready.");
-            if (CombatManager.Instance.PlayerActionsDisabled || player.PlayerCombatState?.Phase != PlayerTurnPhase.Play)
-                throw new InvalidOperationException("请等待玩家可出牌时再添加卡牌。");
-            if (RunManager.Instance.ActionExecutor.IsRunning)
-                throw new InvalidOperationException("请等待当前出牌效果执行完毕。");
             var card = combat.CreateCard(Config.Card, player);
             if (Config.Upgraded && card.IsUpgradable) CardCmd.Upgrade(card);
             await CardPileCmd.Add(card, PileType.Hand);
