@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrainingCamp",
+  "name": "训练营 Training Camp",
+  "author": "junyi",
+  "description": "主菜单新增训练营入口：选完角色直接打假人，可调假人血量/能量，图形化选卡加入手牌或卡组，方便测试皮肤和卡牌特效类 mod。",
+  "version": "v1.0.0",
+  "min_game_version": "0.107.0",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": true
+}
