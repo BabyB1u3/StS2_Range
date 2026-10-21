@@ -43,6 +43,7 @@ try
     SeedSmoke.Run(assembly);
     PickerSmoke.Run(assembly, harmony);
     PauseMenuSmoke.Run(assembly, harmony);
+    CharacterPickerSmoke.Run(assembly, harmony);
 }
 finally
 {

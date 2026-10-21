@@ -11,24 +11,25 @@ namespace SpireRange;
 public partial class RangeSetupScreen : NSubmenu
 {
     private NMainMenu _menu = null!;
-    private OptionButton _character = null!;
+    private Button _changeCharacter = null!;
+    private Label _characterName = null!;
     private SpinBox _energy = null!;
     private LineEdit _seed = null!;
     private Label _cardName = null!;
     private Label _monsterName = null!;
     private Button _start = null!;
     private bool _blocking;
-    private List<CharacterModel> _characters = new();
 
     internal CardModel? SelectedCard { get; private set; }
     internal MonsterModel? SelectedMonster { get; private set; }
-    internal CharacterModel SelectedCharacter => _characters[_character.Selected];
+    internal CharacterModel SelectedCharacter { get; private set; } = null!;
     internal bool Upgraded { get; private set; }
-    protected override Control InitialFocusedControl => _character;
+    protected override Control InitialFocusedControl => _changeCharacter;
 
-    public static RangeSetupScreen Create(NMainMenu menu)
+    public static RangeSetupScreen Create(NMainMenu menu, CharacterModel character)
     {
-        var screen = new RangeSetupScreen { Name = "SpireRangeSetup", Visible = false, _menu = menu };
+        var screen = new RangeSetupScreen { Name = "SpireRangeSetup", Visible = false,
+            _menu = menu, SelectedCharacter = character };
         screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         // Copy only the native back-button node; no native page or persistent signals
         // from the Compendium are attached to this setup page.
@@ -81,6 +82,12 @@ public partial class RangeSetupScreen : NSubmenu
         _start.Disabled = SelectedMonster is null;
     }
 
+    internal void ChooseCharacter(CharacterModel character)
+    {
+        SelectedCharacter = character;
+        _characterName.Text = character.Title.GetFormattedText();
+    }
+
     internal void ChooseMonster(MonsterModel monster)
     {
         SelectedMonster = ModelDb.GetById<MonsterModel>(monster.Id);
@@ -113,11 +120,12 @@ public partial class RangeSetupScreen : NSubmenu
         var heading = Text("靶场", 42); heading.AddThemeColorOverride("font_color", new Color("EACB88"));
         body.AddChild(heading);
         body.AddChild(Text("选择角色、卡牌和怪物，直接开始一场练习。", 22));
-        _characters = ModelDb.AllCharacters.ToList();
         body.AddChild(Text("角色", 24));
-        _character = new OptionButton { CustomMinimumSize = new Vector2(0, 52) };
-        foreach (var character in _characters) _character.AddItem(character.Title.GetFormattedText());
-        body.AddChild(_character);
+        _characterName = Text(SelectedCharacter.Title.GetFormattedText(), 28);
+        body.AddChild(_characterName);
+        _changeCharacter = ActionButton("更换角色");
+        _changeCharacter.Pressed += () => RangeCharacterPicker.Open(_menu, this);
+        body.AddChild(_changeCharacter);
         var choices = new GridContainer { Columns = 2, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         choices.AddThemeConstantOverride("h_separation", 28);
         choices.AddThemeConstantOverride("v_separation", 22);
