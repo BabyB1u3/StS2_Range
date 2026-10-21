@@ -44,6 +44,7 @@ try
     PickerSmoke.Run(assembly, harmony);
     PauseMenuSmoke.Run(assembly, harmony);
     CharacterPickerSmoke.Run(assembly, harmony);
+    MultiCardSmoke.Run(assembly);
 }
 finally
 {

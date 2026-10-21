@@ -26,7 +26,7 @@ internal static class BattleStateSmoke
             stateField.SetValue(null, run);
             active.SetValue(null, true);
             config.SetValue(null, Activator.CreateInstance(mod.GetType("SpireRange.RangeConfig")!,
-                new object?[] { null, null, null, false, 3, "STATE_TEST" }));
+                new object?[] { null, Array.CreateInstance(mod.GetType("SpireRange.RangeTestCard")!, 0), null, 3, "STATE_TEST" }));
             void Raise<T>(string name, T value) =>
                 ((Action<T>)AccessTools.Field(typeof(CombatManager), name).GetValue(CombatManager.Instance)!)(value);
 

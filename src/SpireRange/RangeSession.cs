@@ -13,8 +13,26 @@ using MegaCrit.Sts2.Core.Unlocks;
 
 namespace SpireRange;
 
-internal sealed record RangeConfig(CharacterModel Character, CardModel Card, MonsterModel Monster,
-    bool Upgraded, int Energy, string Seed);
+internal sealed record RangeTestCard(CardModel Card, bool Upgraded);
+
+internal sealed record RangeConfig
+{
+    public CharacterModel Character { get; init; }
+    public IReadOnlyList<RangeTestCard> Cards { get; }
+    public MonsterModel Monster { get; init; }
+    public int Energy { get; init; }
+    public string Seed { get; init; }
+
+    public RangeConfig(CharacterModel character, IEnumerable<RangeTestCard> cards, MonsterModel monster,
+        int energy, string seed)
+    {
+        Character = character;
+        Cards = Array.AsReadOnly(cards.ToArray());
+        Monster = monster;
+        Energy = energy;
+        Seed = seed;
+    }
+}
 
 internal enum RangeBattleStatus { Preparing, Playing, Victory, Defeat, Error }
 
@@ -102,10 +120,8 @@ internal static class RangeSession
             manager.SetUpNewSingleplayer(_state, shouldSave: false);
             manager.CombatReplayWriter.IsEnabled = false;
 
-            // Keep the character's starting inventory and add one test card to the deck.
-            var card = _state.CreateCard(config.Card, player);
-            if (config.Upgraded && card.IsUpgradable) CardCmd.Upgrade(card);
-            player.Deck.AddInternal(card, silent: true);
+            // Each entry is a separate copy, with its own upgrade state.
+            AddTestCards(_state, player, config.Cards);
             player.MaxEnergy = config.Energy;
             await PreloadManager.LoadRunAssets(new[] { config.Character });
             await PreloadManager.LoadActAssets(_state.Acts[source.ActIndex]);
@@ -117,7 +133,7 @@ internal static class RangeSession
 
             var encounter = RangeEncounterFactory.Prepare(source.Encounter, config.Monster, _state);
             await manager.EnterRoomDebug(encounter.RoomType, MapPointType.Unassigned, encounter);
-            GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Card.Id} / {config.Monster.Id} / seed={config.Seed}");
+            GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Cards.Count} test cards / {config.Monster.Id} / seed={config.Seed}");
         }
         catch
         {
@@ -125,6 +141,16 @@ internal static class RangeSession
             throw;
         }
         finally { IsBusy = false; }
+    }
+
+    internal static void AddTestCards(ICardScope scope, Player player, IEnumerable<RangeTestCard> cards)
+    {
+        foreach (var selected in cards)
+        {
+            var card = scope.CreateCard(selected.Card, player);
+            if (selected.Upgraded && card.IsUpgradable) CardCmd.Upgrade(card);
+            player.Deck.AddInternal(card, silent: true);
+        }
     }
 
     public static async Task Exit()
