@@ -15,7 +15,11 @@ internal static class RangeEncounterFactory
         AccessTools.Field(typeof(EncounterModel), "_monstersWithSlots")
         ?? throw new MissingFieldException(typeof(EncounterModel).FullName, "_monstersWithSlots");
 
-    public static RangeEncounterSource? FindSource(MonsterModel target) =>
+    public static RangeEncounterSource? FindSource(MonsterModel? target) => target is null
+        // This event encounter is absent from the acts' ordinary combat pools.
+        ? new RangeEncounterSource(ActModel.GetDefaultList().First(), 0,
+            ModelDb.Encounter<BattlewornDummyEventEncounter>())
+        :
         ModelDb.ActsByIndex.SelectMany((acts, index) => acts.SelectMany(act => act.AllEncounters
                 .Where(e => e.AllPossibleMonsters.Any(m => m.Id == target.Id))
                 .Select(e => new RangeEncounterSource(act, index, e))))
@@ -26,8 +30,16 @@ internal static class RangeEncounterFactory
             .ThenBy(s => s.Encounter.Id.Entry, StringComparer.Ordinal)
             .FirstOrDefault();
 
-    public static EncounterModel Prepare(EncounterModel source, MonsterModel target, IRunState state)
+    public static EncounterModel Prepare(EncounterModel source, MonsterModel? target, IRunState state)
     {
+        if (target is null)
+        {
+            // Match TrainingCamp's default: native event dummy, first HP tier.
+            var dummy = (BattlewornDummyEventEncounter)ModelDb.Encounter<BattlewornDummyEventEncounter>().ToMutable();
+            dummy.Setting = BattlewornDummyEventEncounter.DummySetting.Setting1;
+            dummy.GenerateMonstersWithSlots(state);
+            return dummy;
+        }
         var encounter = source.ToMutable();
         encounter.GenerateMonstersWithSlots(state);
         var selected = encounter.MonstersWithSlots.FirstOrDefault(m => m.Item1.Id == target.Id);

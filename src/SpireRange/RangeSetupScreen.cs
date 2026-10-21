@@ -85,7 +85,7 @@ public partial class RangeSetupScreen : NSubmenu
 
     private void RefreshCards()
     {
-        _cardName.Text = _cards.Count == 0 ? "尚未选择卡牌" : $"已选择 {_cards.Count} 张测试卡牌";
+        _cardName.Text = _cards.Count == 0 ? "未添加测试卡牌（使用角色初始卡组）" : $"已选择 {_cards.Count} 张测试卡牌";
         foreach (var child in _cardRows.GetChildren())
         {
             _cardRows.RemoveChild(child);
@@ -104,7 +104,6 @@ public partial class RangeSetupScreen : NSubmenu
             row.AddChild(remove);
             _cardRows.AddChild(row);
         }
-        _start.Disabled = _cards.Count == 0 || SelectedMonster is null;
     }
 
     internal void ChooseCharacter(CharacterModel character)
@@ -113,11 +112,10 @@ public partial class RangeSetupScreen : NSubmenu
         _characterName.Text = character.Title.GetFormattedText();
     }
 
-    internal void ChooseMonster(MonsterModel monster)
+    internal void ChooseMonster(MonsterModel? monster)
     {
-        SelectedMonster = ModelDb.GetById<MonsterModel>(monster.Id);
-        _monsterName.Text = SelectedMonster.Title.GetFormattedText();
-        _start.Disabled = _cards.Count == 0;
+        SelectedMonster = monster is null ? null : ModelDb.GetById<MonsterModel>(monster.Id);
+        _monsterName.Text = SelectedMonster?.Title.GetFormattedText() ?? "默认训练木偶（75 HP，不攻击，无回合限制）";
     }
 
     private void Build()
@@ -163,15 +161,18 @@ public partial class RangeSetupScreen : NSubmenu
         }
         Resized += ResizeLayout;
         ResizeLayout();
-        _cardName = ChoiceTile(choices, "测试卡牌", "尚未选择卡牌", "打开卡牌总览",
+        _cardName = ChoiceTile(choices, "测试卡牌（可选）", "未添加测试卡牌（使用角色初始卡组）", "打开卡牌总览",
             () => RangeCompendiumPickers.OpenCards(this, _stack));
         _cardRows = new VBoxContainer();
         _cardRows.AddThemeConstantOverride("separation", 8);
         var cardBox = _cardName.GetParent();
         cardBox.AddChild(_cardRows);
         cardBox.MoveChild(_cardRows, _cardName.GetIndex() + 1);
-        _monsterName = ChoiceTile(choices, "目标怪物", "尚未选择怪物", "打开怪物图鉴",
+        _monsterName = ChoiceTile(choices, "目标怪物（可选）", "默认训练木偶（75 HP，不攻击，无回合限制）", "打开怪物图鉴",
             () => RangeCompendiumPickers.OpenMonsters(this, _stack));
+        var defaultMonster = ActionButton("使用默认训练木偶");
+        defaultMonster.Pressed += () => ChooseMonster(null);
+        _monsterName.GetParent().AddChild(defaultMonster);
         var options = new HBoxContainer(); options.AddThemeConstantOverride("separation", 16); body.AddChild(options);
         var energyLabel = Text("每回合基础能量", 22);
         energyLabel.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
@@ -181,8 +182,8 @@ public partial class RangeSetupScreen : NSubmenu
         options.AddChild(_energy);
         _seed = new LineEdit { PlaceholderText = "随机种子（选填，留空则随机）", CustomMinimumSize = new Vector2(0, 50) };
         body.AddChild(_seed);
-        body.AddChild(Text("保留角色初始卡组和遗物，额外加入全部测试卡牌。支持重复添加，每张可单独选择升级版。重置会保留卡牌配置和种子。", 20));
-        _start = ActionButton("开始测试", true); _start.Disabled = true;
+        body.AddChild(Text("保留角色初始卡组和遗物，额外加入全部测试卡牌；不选卡牌也可开始。不选怪物时使用默认训练木偶。重置会保留卡牌配置、目标和种子。", 20));
+        _start = ActionButton("开始测试", true);
         _start.Pressed += StartBattle;
         body.AddChild(_start);
         // Native back button stays above the backdrop and uses its normal hotkeys.
@@ -191,7 +192,7 @@ public partial class RangeSetupScreen : NSubmenu
 
     private async void StartBattle()
     {
-        if (_cards.Count == 0 || SelectedMonster is null || RangeSession.IsBusy) return;
+        if (RangeSession.IsBusy) return;
         var config = new RangeConfig(SelectedCharacter, _cards, SelectedMonster,
             (int)_energy.Value, _seed.Text.Trim());
         _start.Disabled = true;

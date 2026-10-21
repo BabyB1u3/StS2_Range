@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Encounters;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -19,11 +20,11 @@ internal sealed record RangeConfig
 {
     public CharacterModel Character { get; init; }
     public IReadOnlyList<RangeTestCard> Cards { get; }
-    public MonsterModel Monster { get; init; }
+    public MonsterModel? Monster { get; init; }
     public int Energy { get; init; }
     public string Seed { get; init; }
 
-    public RangeConfig(CharacterModel character, IEnumerable<RangeTestCard> cards, MonsterModel monster,
+    public RangeConfig(CharacterModel character, IEnumerable<RangeTestCard> cards, MonsterModel? monster,
         int energy, string seed)
     {
         Character = character;
@@ -70,6 +71,11 @@ internal static class RangeSession
 
     public static bool CanResetOrExit => IsActive && !IsBusy && (StartupError is not null ||
         (!CombatManager.Instance.IsStarting && !CombatManager.Instance.IsEnding && !RunManager.Instance.ActionExecutor.IsRunning));
+
+    internal static bool IsDefaultDummyCombat(ICombatState? combat) =>
+        IsActive && Config is { Monster: null } && _state is not null &&
+        ReferenceEquals(combat?.RunState, _state) &&
+        combat.Encounter is BattlewornDummyEventEncounter { Setting: BattlewornDummyEventEncounter.DummySetting.Setting1 };
 
     internal static async Task ObserveCombatStart(Task task, CombatState? combat)
     {
@@ -133,7 +139,7 @@ internal static class RangeSession
 
             var encounter = RangeEncounterFactory.Prepare(source.Encounter, config.Monster, _state);
             await manager.EnterRoomDebug(encounter.RoomType, MapPointType.Unassigned, encounter);
-            GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Cards.Count} test cards / {config.Monster.Id} / seed={config.Seed}");
+            GD.Print($"[SpireRange] Started: {config.Character.Id} / {config.Cards.Count} test cards / {config.Monster?.Id.ToString() ?? "default training dummy"} / seed={config.Seed}");
         }
         catch
         {

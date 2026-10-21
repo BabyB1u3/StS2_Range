@@ -46,6 +46,10 @@ internal static class MultiCardSmoke
             AccessTools.Field(typeof(Player), "_runState").SetValue(player, run);
             var starting = run.CreateCard(strike, player);
             player.Deck.AddInternal(starting, silent: true);
+            var empty = Array.CreateInstance(selectionType, 0);
+            add.Invoke(null, new object[] { run, player, empty });
+            if (player.Deck.Cards.Count != 1 || !ReferenceEquals(player.Deck.Cards.Single(), starting) || starting.IsUpgraded)
+                throw new Exception("An empty test-card selection changed the starting deck.");
             add.Invoke(null, new[] { run, player, (object)cards });
             var deck = player.Deck.Cards.ToArray();
             if (deck.Length != 5 || !ReferenceEquals(deck[0], starting) || starting.IsUpgraded
