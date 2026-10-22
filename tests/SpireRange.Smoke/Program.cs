@@ -43,6 +43,9 @@ try
     SeedSmoke.Run(assembly);
     PickerSmoke.Run(assembly, harmony);
     PauseMenuSmoke.Run(assembly, harmony);
+    CharacterPickerSmoke.Run(assembly, harmony);
+    MultiCardSmoke.Run(assembly);
+    await DefaultDummySmoke.Run(assembly, harmony);
 }
 finally
 {

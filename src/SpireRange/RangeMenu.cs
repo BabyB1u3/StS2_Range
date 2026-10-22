@@ -26,9 +26,7 @@ internal static class RangeMenu
         button.Enable();
         button.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(_ =>
         {
-            var screen = RangeSetupScreen.Create(menu);
-            menu.SubmenuStack.AddChild(screen);
-            menu.SubmenuStack.Push(screen);
+            RangeCharacterPicker.Open(menu);
         }));
         button.Connect(NClickableControl.SignalName.Focused,
             Callable.From<NMainMenuTextButton>(b => NativeAccess.Call(menu, "MainMenuButtonFocused", b)));

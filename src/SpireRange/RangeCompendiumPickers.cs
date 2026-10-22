@@ -44,9 +44,12 @@ internal static class RangeCompendiumPickers
         if (existing is not null) { stack.Push(existing.Screen); return; }
         var screen = NCardLibrary.Create() ?? throw new InvalidOperationException("Card library unavailable.");
         screen.Name = "SpireRangeCardPicker";
-        var picker = Register(owner, stack, screen, "选择一张卡牌查看详情，然后确认。", "使用这张卡牌");
-        picker.Footer.Visible = false;
-        picker.Confirm.Pressed += () => ConfirmCard(picker);
+        var picker = Register(owner, stack, screen, "", "完成选择");
+        picker.Confirm.Pressed += () =>
+        {
+            if (picker.Detail is not null) ConfirmCard(picker);
+            else if (picker.Open && ReferenceEquals(stack.Peek(), screen)) stack.Pop();
+        };
         stack.AddChild(screen);
         stack.Push(screen);
     }
@@ -98,6 +101,7 @@ internal static class RangeCompendiumPickers
         picker.Open = true;
         if (screen is NCardLibrary library)
         {
+            ShowCardSummary(picker);
             var filters = NativeAccess.Get<Dictionary<CharacterModel, NCardPoolFilter>>(library, "_cardPoolFilters");
             if (filters.TryGetValue(picker.Owner.SelectedCharacter, out var selected))
             {
@@ -106,7 +110,7 @@ internal static class RangeCompendiumPickers
                 NativeAccess.Call(library, "UpdateCardPoolFilter", selected);
             }
             var upgraded = NativeAccess.Get<NTickbox>(library, "_viewUpgrades");
-            upgraded.IsTicked = picker.Owner.Upgraded;
+            upgraded.IsTicked = picker.Owner.PreviewUpgraded;
             NativeAccess.Call(library, "ToggleShowUpgrades", upgraded);
         }
     }
@@ -160,6 +164,7 @@ internal static class RangeCompendiumPickers
         if (!Pickers.TryGetValue(screen, out var picker)) return false;
         if (holder.CardModel is not { } card) return true;
         picker.Card = ModelDb.GetById<CardModel>(card.Id);
+        picker.Confirm.Text = "加入测试卡组";
         NativeAccess.Set(screen, "_lastHoveredControl", holder);
         picker.Caption.Text = "已选：" + picker.Card.Title;
         picker.Confirm.Disabled = false;
@@ -201,8 +206,16 @@ internal static class RangeCompendiumPickers
     {
         if (!Details.Remove(detail, out var picker)) return;
         picker.Detail = null;
-        picker.Footer.Visible = false;
         picker.Footer.Reparent(picker.Screen, keepGlobalTransform: false);
+        ShowCardSummary(picker);
+    }
+
+    private static void ShowCardSummary(Picker picker)
+    {
+        picker.Caption.Text = $"已选择 {picker.Owner.SelectedCards.Count} 张，可继续添加（支持重复）。";
+        picker.Confirm.Text = "完成选择";
+        picker.Confirm.Disabled = false;
+        picker.Footer.Visible = true;
     }
 
     private static void ConfirmCard(Picker picker)
@@ -211,7 +224,6 @@ internal static class RangeCompendiumPickers
         var selection = ReadDetailSelection(detail); // Includes left/right navigation and the detail tickbox.
         picker.Owner.ChooseCard(selection.Card, selection.Upgraded);
         CloseDetailImmediately(detail);
-        if (ReferenceEquals(picker.Stack.Peek(), picker.Screen)) picker.Stack.Pop();
     }
 
     private static void CloseDetailImmediately(NInspectCardScreen detail)

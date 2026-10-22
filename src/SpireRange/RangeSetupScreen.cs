@@ -11,24 +11,27 @@ namespace SpireRange;
 public partial class RangeSetupScreen : NSubmenu
 {
     private NMainMenu _menu = null!;
-    private OptionButton _character = null!;
+    private Button _changeCharacter = null!;
+    private Label _characterName = null!;
     private SpinBox _energy = null!;
     private LineEdit _seed = null!;
     private Label _cardName = null!;
+    private VBoxContainer _cardRows = null!;
+    private readonly List<RangeTestCard> _cards = new();
     private Label _monsterName = null!;
     private Button _start = null!;
     private bool _blocking;
-    private List<CharacterModel> _characters = new();
 
-    internal CardModel? SelectedCard { get; private set; }
+    internal IReadOnlyList<RangeTestCard> SelectedCards => _cards;
     internal MonsterModel? SelectedMonster { get; private set; }
-    internal CharacterModel SelectedCharacter => _characters[_character.Selected];
-    internal bool Upgraded { get; private set; }
-    protected override Control InitialFocusedControl => _character;
+    internal CharacterModel SelectedCharacter { get; private set; } = null!;
+    internal bool PreviewUpgraded => _cards.LastOrDefault()?.Upgraded ?? false;
+    protected override Control InitialFocusedControl => _changeCharacter;
 
-    public static RangeSetupScreen Create(NMainMenu menu)
+    public static RangeSetupScreen Create(NMainMenu menu, CharacterModel character)
     {
-        var screen = new RangeSetupScreen { Name = "SpireRangeSetup", Visible = false, _menu = menu };
+        var screen = new RangeSetupScreen { Name = "SpireRangeSetup", Visible = false,
+            _menu = menu, SelectedCharacter = character };
         screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         // Copy only the native back-button node; no native page or persistent signals
         // from the Compendium are attached to this setup page.
@@ -75,17 +78,44 @@ public partial class RangeSetupScreen : NSubmenu
 
     internal void ChooseCard(CardModel card, bool upgraded)
     {
-        SelectedCard = ModelDb.GetById<CardModel>(card.Id);
-        Upgraded = upgraded && SelectedCard.IsUpgradable;
-        _cardName.Text = SelectedCard.Title + (Upgraded ? "（已升级）" : "");
-        _start.Disabled = SelectedMonster is null;
+        var canonical = ModelDb.GetById<CardModel>(card.Id);
+        _cards.Add(new RangeTestCard(canonical, upgraded && canonical.IsUpgradable));
+        RefreshCards();
     }
 
-    internal void ChooseMonster(MonsterModel monster)
+    private void RefreshCards()
     {
-        SelectedMonster = ModelDb.GetById<MonsterModel>(monster.Id);
-        _monsterName.Text = SelectedMonster.Title.GetFormattedText();
-        _start.Disabled = SelectedCard is null;
+        _cardName.Text = _cards.Count == 0 ? "未添加测试卡牌（使用角色初始卡组）" : $"已选择 {_cards.Count} 张测试卡牌";
+        foreach (var child in _cardRows.GetChildren())
+        {
+            _cardRows.RemoveChild(child);
+            child.QueueFree();
+        }
+        for (var i = 0; i < _cards.Count; i++)
+        {
+            var index = i;
+            var selection = _cards[i];
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 12);
+            row.AddChild(Text(selection.Card.Title + (selection.Upgraded ? "（已升级）" : ""), 22));
+            var remove = ActionButton("移除");
+            remove.CustomMinimumSize = new Vector2(84, 40);
+            remove.Pressed += () => { _cards.RemoveAt(index); RefreshCards(); };
+            row.AddChild(remove);
+            _cardRows.AddChild(row);
+        }
+    }
+
+    internal void ChooseCharacter(CharacterModel character)
+    {
+        SelectedCharacter = character;
+        _characterName.Text = character.Title.GetFormattedText();
+    }
+
+    internal void ChooseMonster(MonsterModel? monster)
+    {
+        SelectedMonster = monster is null ? null : ModelDb.GetById<MonsterModel>(monster.Id);
+        _monsterName.Text = SelectedMonster?.Title.GetFormattedText() ?? "默认训练木偶（75 HP，不攻击，无回合限制）";
     }
 
     private void Build()
@@ -113,11 +143,12 @@ public partial class RangeSetupScreen : NSubmenu
         var heading = Text("靶场", 42); heading.AddThemeColorOverride("font_color", new Color("EACB88"));
         body.AddChild(heading);
         body.AddChild(Text("选择角色、卡牌和怪物，直接开始一场练习。", 22));
-        _characters = ModelDb.AllCharacters.ToList();
         body.AddChild(Text("角色", 24));
-        _character = new OptionButton { CustomMinimumSize = new Vector2(0, 52) };
-        foreach (var character in _characters) _character.AddItem(character.Title.GetFormattedText());
-        body.AddChild(_character);
+        _characterName = Text(SelectedCharacter.Title.GetFormattedText(), 28);
+        body.AddChild(_characterName);
+        _changeCharacter = ActionButton("更换角色");
+        _changeCharacter.Pressed += () => RangeCharacterPicker.Open(_menu, this);
+        body.AddChild(_changeCharacter);
         var choices = new GridContainer { Columns = 2, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         choices.AddThemeConstantOverride("h_separation", 28);
         choices.AddThemeConstantOverride("v_separation", 22);
@@ -130,10 +161,18 @@ public partial class RangeSetupScreen : NSubmenu
         }
         Resized += ResizeLayout;
         ResizeLayout();
-        _cardName = ChoiceTile(choices, "测试卡牌", "尚未选择卡牌", "打开卡牌总览",
+        _cardName = ChoiceTile(choices, "测试卡牌（可选）", "未添加测试卡牌（使用角色初始卡组）", "打开卡牌总览",
             () => RangeCompendiumPickers.OpenCards(this, _stack));
-        _monsterName = ChoiceTile(choices, "目标怪物", "尚未选择怪物", "打开怪物图鉴",
+        _cardRows = new VBoxContainer();
+        _cardRows.AddThemeConstantOverride("separation", 8);
+        var cardBox = _cardName.GetParent();
+        cardBox.AddChild(_cardRows);
+        cardBox.MoveChild(_cardRows, _cardName.GetIndex() + 1);
+        _monsterName = ChoiceTile(choices, "目标怪物（可选）", "默认训练木偶（75 HP，不攻击，无回合限制）", "打开怪物图鉴",
             () => RangeCompendiumPickers.OpenMonsters(this, _stack));
+        var defaultMonster = ActionButton("使用默认训练木偶");
+        defaultMonster.Pressed += () => ChooseMonster(null);
+        _monsterName.GetParent().AddChild(defaultMonster);
         var options = new HBoxContainer(); options.AddThemeConstantOverride("separation", 16); body.AddChild(options);
         var energyLabel = Text("每回合基础能量", 22);
         energyLabel.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
@@ -143,8 +182,8 @@ public partial class RangeSetupScreen : NSubmenu
         options.AddChild(_energy);
         _seed = new LineEdit { PlaceholderText = "随机种子（选填，留空则随机）", CustomMinimumSize = new Vector2(0, 50) };
         body.AddChild(_seed);
-        body.AddChild(Text("保留角色初始卡组和遗物，额外加入一张测试卡牌。重置会保留本次种子。", 20));
-        _start = ActionButton("开始测试", true); _start.Disabled = true;
+        body.AddChild(Text("保留角色初始卡组和遗物，额外加入全部测试卡牌；不选卡牌也可开始。不选怪物时使用默认训练木偶。重置会保留卡牌配置、目标和种子。", 20));
+        _start = ActionButton("开始测试", true);
         _start.Pressed += StartBattle;
         body.AddChild(_start);
         // Native back button stays above the backdrop and uses its normal hotkeys.
@@ -153,9 +192,9 @@ public partial class RangeSetupScreen : NSubmenu
 
     private async void StartBattle()
     {
-        if (SelectedCard is null || SelectedMonster is null || RangeSession.IsBusy) return;
-        var config = new RangeConfig(SelectedCharacter, SelectedCard, SelectedMonster,
-            Upgraded, (int)_energy.Value, _seed.Text.Trim());
+        if (RangeSession.IsBusy) return;
+        var config = new RangeConfig(SelectedCharacter, _cards, SelectedMonster,
+            (int)_energy.Value, _seed.Text.Trim());
         _start.Disabled = true;
         HideBackButtonImmediately();
         try
